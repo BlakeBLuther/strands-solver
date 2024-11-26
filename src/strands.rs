@@ -65,13 +65,24 @@ impl Strands {
                 }
             }
         }
+        println!("Found {:?} potential words.", candidates.keys().len());
+        let mut word_list = vec![];
+        for word in candidates.keys() {
+            word_list.push(word.clone());
+        }
+        word_list.sort_by(|x, y| y.len().cmp(&x.len()));
+        println!("Words: ");
+        for word in word_list {
+            println!("{:?}", word);
+        }
+
         //`candidates` is now all possible dict words formed from the puzzle.
         // next step is to identify the combination that meets our requirement (all nodes visited, no overlap)
         for candidate_words_and_coords in Combinations::of_size(candidates, self.num_answers) {
             let mut answer_found = true;
             let mut used_coords = vec![vec![false; cols]; rows];
             'candidate_words: for word_and_coords in &candidate_words_and_coords {
-                let candidate_coords = &word_and_coords.1;
+                let candidate_coords: &Vec<(isize, isize)> = &word_and_coords.1;
                 for coord in candidate_coords {
                     if used_coords[coord.0 as usize][coord.1 as usize] {
                         answer_found = false; //overlap identified, invalid solution

@@ -8,7 +8,7 @@ mod trie;
 mod strands;
 
 fn main() {
-    let file_path = Path::new("./english-words/words_alpha.txt");
+    let file_path = Path::new("./english-words/words_alpha_pruned.txt"); //using a custom dict. just english words with len <4 removed.
     println!("Reading file {}...", file_path.to_str().unwrap());
     let file = fs::File::open(file_path).expect("Failed to open file.");
     let reader = io::BufReader::new(file);
