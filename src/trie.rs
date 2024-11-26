@@ -19,19 +19,20 @@ impl Trie {
 
     pub fn insert(&mut self, word: String) {
         // given a word, insert it into the trie
+        // case agnostic
         let mut current_node = &mut self.root_node;
         for letter in word.chars() {
             let mut need_new = true;
             let mut index = 0;
             for child in &current_node.children {
-                if child.letter.unwrap() == letter {
+                if child.letter.unwrap().to_ascii_lowercase() == letter.to_ascii_lowercase() {
                     need_new = false;
                     break;
                 }
                 index += 1;
             }
             if need_new {
-                let new_node = Box::new(Node::new(Some(letter)));
+                let new_node = Box::new(Node::new(Some(letter.to_ascii_lowercase())));
                 current_node.children.push(new_node);
                 current_node = current_node.children.last_mut().unwrap();
             }
@@ -43,14 +44,15 @@ impl Trie {
     }
 
     pub fn search(&self, word: &String) -> Option<(String, bool)> {
-        //given a word, search for it in the trie
-        //if found, returns the match (echos input) and if it's the end of word, otherwise returns None
+        // given a word, search for it in the trie
+        // case agnostic
+        // if found, returns the match (echos input) and if it's the end of word, otherwise returns None
         let mut current_node = &self.root_node;
         for letter_index in 0..word.len() {
             let mut found = false;
             let mut next_node_ind = 0;
             for child_index in 0..current_node.children.len() {
-                if current_node.children[child_index].letter == word.chars().nth(letter_index) {
+                if current_node.children[child_index].letter == word.to_ascii_lowercase().chars().nth(letter_index) {
                     found = true;
                     next_node_ind = child_index;
                     break
@@ -248,5 +250,20 @@ mod tests {
         )
     }
 
+    #[test]
+    fn test_search_5() {
+        let mut trie = Trie::new();
+        trie.insert("DOG".to_string());
+        trie.insert("CAT".to_string());
+
+        assert_eq!(
+            trie.search(&"dog".to_string()),
+            Some(("dog".to_string(), true))
+        );
+        assert_eq!(
+            trie.search(&"cat".to_string()),
+            Some(("cat".to_string(), true))
+        )
+    }
     
 }

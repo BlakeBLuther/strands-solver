@@ -23,15 +23,14 @@ fn main() {
     let file_path = Path::new("./strands.txt");
     println!("Reading file {}...", file_path.to_str().unwrap());
     let puzzle = fs::read_to_string(file_path).expect("Unable to read puzzle.");
-    let strands = Strands::new(puzzle);
+    let strands = Strands::new(puzzle, 8);
     println!("Puzzle loaded:");
     strands.print();
-    println!();
-    print!("Attempting to solve...");
-    if let Some(results) = strands.solve(8, &trie) {
+    println!("Attempting to solve...");
+    if let Some(results) = strands.solve(&trie) {
         println!("Solution:\n");
-        for row in results {
-            println!("{}", strands::cells_to_string(&row));
+        for row in results.keys() {
+            println!("{}", row);
         }
     } else {
         print!("No solution found!");
