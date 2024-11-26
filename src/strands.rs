@@ -70,21 +70,26 @@ impl Strands {
         for candidate_words_and_coords in Combinations::of_size(candidates, self.num_answers) {
             let mut answer_found = true;
             let mut used_coords = vec![vec![false; cols]; rows];
-            for word_and_coords in &candidate_words_and_coords {
+            'candidate_words: for word_and_coords in &candidate_words_and_coords {
                 let candidate_coords = &word_and_coords.1;
                 for coord in candidate_coords {
                     if used_coords[coord.0 as usize][coord.1 as usize] {
                         answer_found = false; //overlap identified, invalid solution
-                        break
+                        break 'candidate_words;
                     }
                     else {
                         used_coords[coord.0 as usize][coord.1 as usize] = true;
                     }
                 }
             }
-            for used_row in 0..used_coords.len() {
-                for used_col in 0..used_coords[used_row].len() {
-                    answer_found &= used_coords[used_row][used_col]; //bitwise AND with each entry in the used tracker matrix. if all true, valid answer. if answer_found was already false, fail.
+            if answer_found {
+                'overlap_check: for used_row in 0..used_coords.len() {
+                    for used_col in 0..used_coords[used_row].len() {
+                        answer_found &= used_coords[used_row][used_col]; //bitwise AND with each entry in the used tracker matrix. if all true, valid answer. if answer_found was already false, fail.
+                        if !answer_found {
+                            break 'overlap_check;
+                        }
+                    }
                 }
             }
             if answer_found {
