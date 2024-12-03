@@ -1,6 +1,4 @@
-use std::collections::HashMap;
-use combinatorial::Combinations;
-// use rayon::prelude::*;
+use std::collections::{HashMap, HashSet};
 
 // Datastructure for the actual Strands puzzle
 use crate::trie::Trie;
@@ -51,7 +49,7 @@ impl Strands {
                         let mut guess_word = String::new();
                         let mut guess_coords = vec![];
                         if !visited_tracker[row2][col2] {
-                            Self::solve_helper(
+                            Self::recurse_find_words(
                                 &self.puzzle,
                                 trie,
                                 starting_point,
@@ -66,7 +64,7 @@ impl Strands {
             }
         }
         println!("Found {:?} potential words.", candidates.keys().len());
-        let mut word_list = vec![];
+        let mut word_list = Vec::new();
         for word in candidates.keys() {
             word_list.push(word.clone());
         }
@@ -76,47 +74,18 @@ impl Strands {
             println!("{:?}", word);
         }
 
-        //`candidates` is now all possible dict words formed from the puzzle.
-        // next step is to identify the combination that meets our requirement (all nodes visited, no overlap)
-        for candidate_words_and_coords in Combinations::of_size(candidates, self.num_answers) {
-            let mut answer_found = true;
-            let mut used_coords = vec![vec![false; cols]; rows];
-            'candidate_words: for word_and_coords in &candidate_words_and_coords {
-                let candidate_coords: &Vec<(isize, isize)> = &word_and_coords.1;
-                for coord in candidate_coords {
-                    if used_coords[coord.0 as usize][coord.1 as usize] {
-                        answer_found = false; //overlap identified, invalid solution
-                        break 'candidate_words;
-                    }
-                    else {
-                        used_coords[coord.0 as usize][coord.1 as usize] = true;
-                    }
-                }
-            }
-            if answer_found {
-                'overlap_check: for used_row in 0..used_coords.len() {
-                    for used_col in 0..used_coords[used_row].len() {
-                        answer_found &= used_coords[used_row][used_col]; //bitwise AND with each entry in the used tracker matrix. if all true, valid answer. if answer_found was already false, fail.
-                        if !answer_found {
-                            break 'overlap_check;
-                        }
-                    }
-                }
-            }
-            if answer_found {
-                //reconstruct answer into appropriate return value
-                let mut answer = HashMap::new();
-                for (key, value) in candidate_words_and_coords {
-                    answer.insert(key, value);
-                }
-                return Some(answer);
-            }
+        let mut potential_solutions = vec![];
+        let depth = 1;
+        Self::recurse_find_solution(&self.puzzle, &mut potential_solutions, &candidates, self.num_answers, depth);
+        let mut result: HashMap<String, Vec<(isize, isize)>> = HashMap::new();
+        for word in potential_solutions {
+            result.insert(word.clone(), candidates.get(&word).unwrap().to_vec());
         }
-        return None
+        return Some(result);
     }
 
-    fn solve_helper(puzzle: &Vec<Vec<char>>, trie: &Trie, start: (isize, isize), visited: &mut Vec<Vec<bool>>, guess_word: &mut String, guess_coords: &mut Vec<(isize, isize)>, result: &mut HashMap<String, Vec<(isize, isize)>>) {
-        // Given a coordinate `start`, will find a possible word starting at that point by recursively checking adjacent letters
+    fn recurse_find_words(puzzle: &Vec<Vec<char>>, trie: &Trie, start: (isize, isize), visited: &mut Vec<Vec<bool>>, guess_word: &mut String, guess_coords: &mut Vec<(isize, isize)>, result: &mut HashMap<String, Vec<(isize, isize)>>) {
+        // Given a coordinate `start`, will find all possible words starting at that point by recursively checking adjacent letters
 
         //Grid boundary checks
         let (row, col) = start;
@@ -133,7 +102,6 @@ impl Strands {
         guess_coords.push((row, col));
         visited[row as usize][col as usize] = true;
 
-
         //If guess is valid (in dict and is word end), add to result
         if let Some(word) = trie.search(guess_word){
             if word.1 {
@@ -144,7 +112,7 @@ impl Strands {
                 (1, 0), (1, -1), (0, -1), (-1, -1)
             ];
             for &(dir_row, dir_col) in directions.iter() {
-                Self::solve_helper(
+                Self::recurse_find_words(
                     puzzle,
                     trie,
                     (start.0 + dir_row, start.1 + dir_col),
@@ -158,8 +126,61 @@ impl Strands {
         visited[row as usize][col as usize] = false;
         guess_word.pop();
         guess_coords.pop();
-
     }
+
+    fn recurse_find_solution(puzzle: &Vec<Vec<char>>, solution: &mut Vec<String>, candidates: &HashMap<String, Vec<(isize, isize)>>, num_answers: usize, mut depth: usize) {
+        // Given a list of candidates, will find the one that uses all possible words with no overlap (the solution).
+        if depth == num_answers {
+            //check to guarantee full coverage of the puzzle
+            let mut used_coords = vec![
+                vec![
+                    false; puzzle[0].len() as usize
+                ]; puzzle.len() as usize
+            ];
+            for word in &mut *solution { 
+                for coord in candidates.get(word).unwrap() {
+                    used_coords[coord.0 as usize][coord.1 as usize] = true;
+                }
+            }
+            let mut all_used = true;
+            for row in used_coords {
+                for col in row {
+                    all_used &= col;
+                }
+            }
+            if all_used {
+                //answer found, it's stored in `solution`
+                return;
+            } 
+        }
+        //haven't hit maximum depth yet. still potential solutions.
+        let mut potential_next = candidates.clone();
+        for word in &mut *solution {
+            potential_next.remove(word);
+        } //`potential_next` and `solution` now have no equal elements
+        for word1 in potential_next.keys() {
+            let mut overlap_found = false;
+            for word2 in &mut *solution {
+                if Self::has_overlap(candidates, word1, word2) {
+                    overlap_found = true;
+                }
+            }
+            if !overlap_found {
+                solution.push(word1.to_string());
+                depth += 1;
+                Self::recurse_find_solution(puzzle, solution, candidates, num_answers, depth);
+                solution.pop();
+                depth -= 1;
+            }
+        }
+    }
+
+    fn has_overlap(candidates: &HashMap<String, Vec<(isize, isize)>>, a: &String, b: &String) -> bool {
+        let a_coords: HashSet<_> = candidates.get(a).unwrap().iter().collect();
+        let b_coords: HashSet<_> = candidates.get(b).unwrap().iter().collect();
+        return !a_coords.is_disjoint(&b_coords);
+    }
+
 }
 
 #[cfg(test)]
@@ -183,7 +204,7 @@ mod tests {
     }
 
     #[test]
-    fn test_solve_helper_recurse_1() {
+    fn test_recurse_find_words_1() {
         let strands = Strands::new("C".to_string(), 1);
         let mut trie = Trie::new();
         trie.insert("C".to_string());
@@ -195,12 +216,12 @@ mod tests {
         let mut guess_word = String::new();
         let guess_coords = &mut vec![];
         let mut result: HashMap<String, Vec<(isize, isize)>> = HashMap::new();
-        Strands::solve_helper(&strands.puzzle, &trie, (0, 0), &mut visited, &mut guess_word, guess_coords, &mut result);
+        Strands::recurse_find_words(&strands.puzzle, &trie, (0, 0), &mut visited, &mut guess_word, guess_coords, &mut result);
         assert_eq!(result, good)
     }
 
     #[test]
-    fn test_solve_helper_recurse_2() {
+    fn test_recurse_find_words_2() {
         let strands = Strands::new("CA".to_string(), 1);
         let mut trie = Trie::new();
         trie.insert("CA".to_string());
@@ -211,13 +232,13 @@ mod tests {
         let mut guess_words = String::new();
         let guess_coords = &mut vec![];
         let mut result: HashMap<String, Vec<(isize, isize)>> = HashMap::new();
-        Strands::solve_helper(&strands.puzzle, &trie, (0, 0), &mut visited, &mut guess_words, guess_coords, &mut result);
+        Strands::recurse_find_words(&strands.puzzle, &trie, (0, 0), &mut visited, &mut guess_words, guess_coords, &mut result);
 
         assert_eq!(result, good) 
     }
 
     #[test]
-    fn test_solve_helper_recurse_3() {
+    fn test_recurse_find_words_3() {
         let strands = Strands::new("CA\nTS".to_string(), 1);
         let mut trie = Trie::new();
         trie.insert("CAT".to_string());
@@ -233,12 +254,12 @@ mod tests {
         let mut guess_words = String::new();
         let guess_coords = &mut vec![];
         let mut result: HashMap<String, Vec<(isize, isize)>> = HashMap::new();
-        Strands::solve_helper(&strands.puzzle, &trie, (0, 0), &mut visited, &mut guess_words, guess_coords, &mut result);
+        Strands::recurse_find_words(&strands.puzzle, &trie, (0, 0), &mut visited, &mut guess_words, guess_coords, &mut result);
         assert_eq!(result, good)
     }
 
     #[test]
-    fn test_solve_helper_recurse_4() {
+    fn test_recurse_find_words_4() {
         let strands = Strands::new("CA\nTD".to_string(), 1);
         let mut trie = Trie::new();
         trie.insert("CAT".to_string());
@@ -250,8 +271,51 @@ mod tests {
         let mut guess_words = String::new();
         let guess_coords = &mut vec![];
         let mut result: HashMap<String, Vec<(isize, isize)>> = HashMap::new();
-        Strands::solve_helper(&strands.puzzle, &trie, (0, 0), &mut visited, &mut guess_words, guess_coords, &mut result);
+        Strands::recurse_find_words(&strands.puzzle, &trie, (0, 0), &mut visited, &mut guess_words, guess_coords, &mut result);
         assert_eq!(result, good)
+    }
+
+    #[test]
+    fn test_find_overlap_1() {
+        let mut candidates: HashMap<String, Vec<(isize, isize)>> = HashMap::new();
+        candidates.insert("A".to_string(), vec![(0,0)]);
+        let a = "A".to_string();
+        let b = "A".to_string();
+        assert!(Strands::has_overlap(&candidates, &a, &b))
+    }
+
+    #[test]
+    fn test_find_overlap_2() {
+        let mut candidates: HashMap<String, Vec<(isize, isize)>> = HashMap::new();
+        candidates.insert("ABC".to_string(), vec![(0,0),(0,1),(1,0)]);
+        candidates.insert("BCD".to_string(), vec![(0,1),(1,0),(1,1)]);
+        let a = "ABC".to_string();
+        let b = "BCD".to_string();
+        assert!(Strands::has_overlap(&candidates, &a, &b))
+    }
+
+    #[test]
+    fn test_find_overlap_3() {
+        let mut candidates: HashMap<String, Vec<(isize, isize)>> = HashMap::new();
+        candidates.insert("ABCDEFG".to_string(), vec![(0,0),(0,1),(0,2),(1,0),(1,1),(1,2),(2,0),(2,1),(2,2)]);
+        candidates.insert("D".to_string(), vec![(1,1)]);
+        let a = "ABCDEFG".to_string();
+        let b = "D".to_string();
+        assert!(Strands::has_overlap(&candidates, &a, &b))
+    }
+
+    #[test]
+    fn test_recurse_find_solution_1() {
+        let good = vec!["ABCD".to_string()];
+        
+        let strands = Strands::new("AB\nCD".to_string(),1);
+        let mut solution = Vec::new();
+        let mut candidates: HashMap<String, Vec<(isize, isize)>> = HashMap::new();
+        candidates.insert("ABCD".to_string(), vec![(0,0),(0,1),(1,0),(1,1)]);
+        let depth = 1;
+        Strands::recurse_find_solution(&strands.puzzle, &mut solution, &candidates, strands.num_answers, depth);
+        
+        assert_eq!(solution, good);
     }
 
     #[test]
